@@ -1,15 +1,16 @@
 #include <WiFiUdp.h>
 #include <WiFi.h>
+#include <lwip/dns.h>
 
 // Access point settings
 const bool EnableAccessPoint = true;
-const IPAddress wifi_ip(192, 168, 0, 1);
+const IPAddress wifi_ip(192, 168, 0, 3);
 const IPAddress wifi_gateway(192, 168, 0, 1);
 const IPAddress wifi_subnet(255, 255, 255, 0);
 
 // Common settings
-const char *WiFiName = "TestServer";
-const char *WiFiPass = "TestServer";
+const char *WiFiName = "Test";
+const char *WiFiPass = "Test1000";
 
 String DeviceName = "mcu-esp32-01";
 // END SETTINGS
@@ -28,6 +29,7 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   //  D2 pin is digital output
   pinMode(T2, OUTPUT);
+  pinMode(T3, OUTPUT);
   // D15 pin is pwm output
   // ledcSetup(0, 12800, 8);
   // ledcAttachPin(A13, 0);
@@ -42,16 +44,22 @@ void setup() {
     {
       Serial.println("[ERROR]Failed to setting WiFi mode!!");
     }
-    if(!WiFi.softAPConfig(wifi_ip, wifi_gateway, wifi_subnet))
-    {
-      Serial.println("[ERROR]Failed to set config!!");
-    }
+
+    WiFi.softAPConfig(wifi_ip, wifi_gateway, wifi_subnet);
 
     Serial.println("[INFO]Start connecting");
     WiFi.softAP(WiFiName, WiFiPass);
+
+    ip_addr_t dns_server = IPADDR4_INIT_BYTES(8, 8, 8, 8);
+    dns_setserver(0, &dns_server);
     
     Serial.println("[INFO]Connection Established!!");
-    udp.begin(default_ip, local_port);
+    if(udp.begin(default_ip, local_port) == 0)
+    {
+      Serial.println("[ERROR] Failed to begin UDP");
+    }
+
+    Serial.printf("[INFO] IP:%s\n", WiFi.softAPIP().toString());
 
     digitalWrite(LED_BUILTIN, HIGH);
   }
@@ -63,11 +71,15 @@ void setup() {
     }
 
     Serial.println("[INFO]Start connecting");
-    WiFi.begin(WiFiName, WiFiPass);
-    
+    if(WiFi.begin(WiFiName, WiFiPass) != WL_CONNECTED)
+    {
+      Serial.println("[ERROR] Failed to connect WiFi.");
+    }
 
     Serial.println("[INFO]Connection Established!!");
-    udp.begin(default_ip,local_port);
+    Serial.print("[INFO]");
+    Serial.println(WiFi.SSID());
+    udp.begin(local_port);
 
     digitalWrite(LED_BUILTIN, HIGH);
   }
@@ -112,11 +124,12 @@ void loop() {
     }
 
     // ledcWrite(0, pwm_rate);
+    dacWrite(T3, pwm_rate);
 
-    udp.beginPacket(broadcast_ip, 64203);
     String send_str = WiFi.localIP().toString() + "," + DeviceName;
-    Serial.printf("Send %s", send_str.c_str());
-    udp.print(send_str.c_str());
+    Serial.println(send_str.c_str());
+    udp.beginPacket(broadcast_ip, 64203);
+    udp.printf(send_str.c_str());
     udp.endPacket();
   }
 }
